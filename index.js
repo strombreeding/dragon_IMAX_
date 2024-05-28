@@ -2,12 +2,24 @@ const puppeteer = require("puppeteer");
 const { default: axios } = require("axios");
 
 const iframSelector = "#ifrm_movie_time_table";
-let firstStarted = false;
-let movieData = {};
 
-const interval = 15000;
+// let firstStarted = false;
+let allowCinemaTypes = ["imax", "4dx"];
+let movieData = {};
+let data = {};
+const processing = {
+  success: [],
+  fail: [],
+  date: "",
+};
+const interval = 20000;
 
 const crawler = async (cb) => {
+  const res = await axios.get("http://localhost:8080/crawl");
+  // movieData = res.data;
+
+  // console.log(JSON.stringify(movieData));
+  // return;
   //   const browser = await puppeteer.launch();
   const browser = await puppeteer.launch({
     headless: false,
@@ -42,6 +54,7 @@ const crawler = async (cb) => {
 async function oneMinCrawling(page) {
   console.log("시작한닷");
   const now = Date.now();
+  processing.date = getCurrentDate;
   try {
     for (let i = 0; i < Object.keys(movieData).length; i++) {
       await getImaxMovie(page, Object.keys(movieData)[i]);
@@ -50,29 +63,33 @@ async function oneMinCrawling(page) {
   } catch (err) {
     console.log("[Error]: ", err.message);
   } finally {
+    // console.log(JSON.stringify(movieData));
     console.log(((now - Date.now()) * -1) / 1000, "초 걸림");
   }
 }
+
+async function pageSetting(page) {}
 
 async function getImaxMovie(page, date) {
   const showTimesSelector = "body > div > div.sect-showtimes > ul";
   const baseUrl =
     "http://www.cgv.co.kr/theaters/?areacode=01&theaterCode=0013&date=";
+  console.log(date, "시작");
   await page.goto(baseUrl + date, { timeout: 60000 });
   await page.waitForSelector(iframSelector);
   const iframeHandle = await page.$(iframSelector);
   const iframe = await iframeHandle.contentFrame();
 
   const ul = await iframe.$(showTimesSelector);
-  const imaxSchdule = await iframe.evaluate(
-    (ul, movieData, date) => {
-      // 필요한 함수 정의
+  console.log(data);
+  const [setMovieData, newItem] = await iframe.evaluate(
+    (ul, movieData, date, allowCinemaTypes) => {
+      // --- 필요한 함수 정의 ---
 
       function getMovieName(li) {
         const movieName = li.children[0].children[1].children[0].textContent;
         return movieName.replace(/\s/g, "");
       }
-      // 기존 시네마타입에 추가된것?
       function getCurrentCinemaTypes(date, movieName) {
         // 한번도 안했던거면 처음 시작하는거니까 시네마타입배열은 []임
         if (movieData[date].length < 1) {
@@ -84,44 +101,30 @@ async function getImaxMovie(page, date) {
         return key[0]["hasCinemaTypes"];
       }
 
-      async function reqNotification(date, cinemaType, schedule) {
-        console.log(`
-        새 오픈 : [${date}  / ${cinemaType}] 
-    `);
-        const data = {
-          date,
-          cinemaType,
-          schedule,
-        };
-        axios.get(`
-                    API서버에선 DB를 조회하여 해당 날짜에 아이맥스를 구독중인 유저에게 노티피케이션 전송
-                subcribe {
-                    date: 20240508,
-                    cinemaType : "아이맥스"
-                    device : 디바이스id,
-                }[]
-                위 구독 테이블을 불러와서
-                받아온 date로 검색한 후
-                해당 디바이스들한테 모두 노티피케이션 해주면 됨
-          `);
-      }
+      // --- 함수정의 끝 ---
 
-      // 함수정의 끝
-
-      const resultList = [];
+      const setMovieData = [];
+      const newItem = [];
       const searchList = ul.children;
 
       // 현재 상영중인 영화를 반복문
       for (let a = 0; a < searchList.length; a++) {
         const li = searchList[a].children[0];
-
         const movieName = getMovieName(li);
         const schedule = [];
+
         const hasCinemaTypes = getCurrentCinemaTypes(date, movieName);
-        console.log(movieName, movieData);
+        console.log(hasCinemaTypes, "여기요@@@");
         for (let x = 1; x < li.children.length; x++) {
-          const ele = li.children[x].children[0].children[0].children[0];
-          const cinemaType = ele.textContent.replace(/\s/g, "").toLowerCase();
+          const ele = li.children[x].children[0].children[0].children[1];
+          const cinemaType = ele.innerText.replace(/\s/g, "").toLowerCase();
+          console.log(cinemaType, allowCinemaTypes);
+          // return;
+
+          if (!allowCinemaTypes.includes(cinemaType)) continue;
+          // 이 위에서 걸리므로 그냥 해도됨
+          if (hasCinemaTypes.includes(cinemaType)) continue;
+
           const showing = [];
 
           // 영화의 상영타입별로 스케쥴을 정리
@@ -136,28 +139,48 @@ async function getImaxMovie(page, date) {
             cinemaType,
             showing,
           });
-
-          console.log("여기냐", hasCinemaTypes, cinemaType);
-          if (!hasCinemaTypes.includes(cinemaType)) {
-            hasCinemaTypes.push(cinemaType);
-            reqNotification(date, cinemaType, schedule);
-          }
-          console.log("잘지나갔냐");
+          hasCinemaTypes.push(cinemaType);
+          newItem.push({ date, cinemaType, schedule, movieName });
+          // throw new Error();
         }
-        resultList.push({
-          movieName,
-          schedule,
-          hasCinemaTypes,
-        });
+        if (hasCinemaTypes.length !== 0) {
+          setMovieData.push({
+            movieName,
+            schedule,
+            hasCinemaTypes,
+          });
+        }
+        console.log("대체 어디야");
+        // throw new Error();
       }
-      return resultList;
+      return [setMovieData, newItem];
     },
     ul,
     movieData,
-    date
+    date,
+    allowCinemaTypes
   );
 
-  movieData[date] = imaxSchdule;
+  if (setMovieData.length === 0) return;
+
+  try {
+    await axios.put("http://localhost:8080/crawl", {
+      date,
+      movieData: setMovieData,
+    });
+  } catch (err) {
+    console.log(err.message);
+  }
+
+  if (newItem.length !== 0) {
+    for (let i = 0; i < newItem.length; i++) {
+      const data = newItem[i];
+      const res = await axios.post("http://localhost:8080/notifications", data);
+      console.log(res.data);
+    }
+  }
+
+  movieData[date] = setMovieData;
 }
 crawler();
 
@@ -167,11 +190,12 @@ async function updateDateList(page) {
     "http://www.cgv.co.kr/theaters/?areacode=01&theaterCode=0013";
 
   // 페이지로 이동하고 로드될 때까지 대기
+  console.log("날짜 주기 업데이트");
   await page.goto(mainPage, { timeout: 60000 });
   await page.waitForSelector(iframSelector);
   const iframeHandle = await page.$(iframSelector);
   const iframe = await iframeHandle.contentFrame();
-
+  console.log("ㅋㅋ");
   const scheduleCalendar = await getScheduleList(iframe);
 
   //   movieData = {};
@@ -216,6 +240,7 @@ async function getScheduleList(iframe) {
     return scheduleCalendar;
   }, sliderElement);
   const result = dropPastDate(scheduleList);
+  console.log(result, "이것들이 리스트");
   return result;
 }
 
