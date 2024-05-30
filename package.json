@@ -5,7 +5,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node index.js",
-    "movie": "node movieCrawl.js"
+    "movie": "node movieCrawl.js",
+    "sheet": "node gcp.js"
   },
   "author": "",
   "license": "ISC",
@@ -14,6 +15,7 @@
     "axios": "^1.6.8",
     "cheerio": "^1.0.0-rc.12",
     "dotenv": "^16.4.5",
+    "googleapis": "^137.1.0",
     "puppeteer": "^22.8.0"
   }
 }

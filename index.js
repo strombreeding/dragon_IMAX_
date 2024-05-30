@@ -2,25 +2,20 @@ const puppeteer = require("puppeteer");
 const { default: axios } = require("axios");
 const { SERVER_URL } = require("./config");
 const iframSelector = "#ifrm_movie_time_table";
-
+const {
+  dropPastDate,
+  retryOption,
+  getCurrentDate,
+  getCurrentDateTime,
+} = require("./utils");
+const { postSheet } = require("./gcp");
 // let firstStarted = false;
 let allowCinemaTypes = ["imax", "4dx"];
 let movieData = {};
 let data = {};
-const processing = {
-  success: [],
-  fail: [],
-  date: "",
-};
-const interval = 20000;
 
 const crawler = async (cb) => {
   const res = await axios.get(SERVER_URL + "crawl");
-  // movieData = res.data;
-
-  // console.log(JSON.stringify(movieData));
-  // return;
-  //   const browser = await puppeteer.launch();
   const browser = await puppeteer.launch({
     headless: false,
     executablePath: "/usr/bin/chromium-browser",
@@ -39,24 +34,25 @@ const crawler = async (cb) => {
     height: 900,
   });
 
-  // 하루에 한번씩 날짜배열 수정시킴
   await updateDateList(page);
 
-  //   setInterval(async () => {
-  //     await updateDateList(page);
-  //   }, 24 * 60 * 60 * 1000);
   await oneMinCrawling(page);
+  browser.close();
+  return;
 };
 
 async function oneMinCrawling(page) {
   console.log("시작한닷");
   const now = Date.now();
-  processing.date = getCurrentDate;
+  const dateString = getCurrentDate(true);
+  const nowTime = getCurrentDateTime();
+  let success = false;
   try {
     for (let i = 0; i < Object.keys(movieData).length; i++) {
       await getImaxMovie(page, Object.keys(movieData)[i]);
       await sleep(150);
     }
+    success = true;
   } catch (err) {
     console.log("[oneMinCrawling:Error] ", err.message);
     if (retryOption(err)) {
@@ -67,6 +63,14 @@ async function oneMinCrawling(page) {
   } finally {
     // console.log(JSON.stringify(movieData));
     console.log(((now - Date.now()) * -1) / 1000, "초 걸림");
+    postSheet(
+      "5min",
+      dateString,
+      success.toString().toUpperCase(),
+      nowTime,
+      getCurrentDateTime(),
+      (((now - Date.now()) * -1) / 1000).toString() + "초"
+    );
   }
 }
 
@@ -216,7 +220,6 @@ async function updateDateList(page) {
 // 현재 용산 CGV의 상영 스케쥴 날짜를 얻는 것
 async function getScheduleList(iframe, page) {
   const sliderElement = await iframe.$("#slider");
-  console.log("어디야");
 
   try {
     const scheduleList = await iframe.evaluate((element) => {
@@ -258,66 +261,17 @@ async function getScheduleList(iframe, page) {
     if (retryOption(err)) {
       await getScheduleList();
     } else {
-      console.log("이거타는거 아냐 ?");
       await puppeteerScreenShot("getScheduleList", page);
     }
   }
 }
 
-// 현재 날짜 기준으로 지난 일수를 배열에서 제거후 반환
-const dropPastDate = (compareList) => {
-  const currentDate = getCurrentDate();
-  const filteredDates = compareList.filter(
-    (date) => Number(date.slice(-4)) >= Number(currentDate)
-  );
-  return filteredDates;
-};
-
-//현재 날짜를 MMDD 형식으로 반환
-const getCurrentDate = () => {
-  const today = new Date();
-  const month = String(today.getMonth() + 1).padStart(2, "0"); // 월은 0부터 시작하므로 +1을 해줌
-  const date = String(today.getDate()).padStart(2, "0");
-  return `${month}${date}`;
-};
 function sleep(milliseconds) {
   return new Promise((resolve) => {
     setTimeout(() => {
       resolve();
     }, milliseconds);
   });
-}
-
-function removeEmpty(str) {
-  return str.replace(/\s/g, "");
-}
-
-function getCurrentDateTime() {
-  const now = new Date();
-
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  const hours = String(now.getHours()).padStart(2, "0");
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const seconds = String(now.getSeconds()).padStart(2, "0");
-
-  return `${year}${month}${day} ${hours}:${minutes}:${seconds}`;
-}
-
-function getMovieName(li) {
-  const movieName = li.children[0].children[1].children[0].textContent;
-  return movieName.replace(/\s/g, "");
-}
-// 기존 시네마타입에 추가된것?
-function getCurrentCinemaTypes(date, movieName) {
-  // 한번도 안했던거면 처음 시작하는거니까 시네마타입배열은 []임
-  if (movieData[date].length < 1) {
-    return [];
-  }
-  const getKeyNameList = Object.keys(movieData[date]);
-  const movieInfo = getKeyNameList.filter((item) => item === movieName);
-  return movieInfo.currentCinemaTypes;
 }
 
 async function reqNotification(date, cinemaType, schedule) {
@@ -342,29 +296,9 @@ async function reqNotification(date, cinemaType, schedule) {
           `);
 }
 
-function retryOption(err) {
-  let process = "";
-  if (err.message.includes("Waiting failed")) {
-    process++;
-  }
-  if (err.message.includes("ms exceeded")) {
-    process++;
-  }
-  console.log(process);
-  return process === 2 ? true : false;
-}
-
-const fs = require("fs");
 async function puppeteerScreenShot(method, page) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth() + 1;
-  const date = now.getDate();
-  const hour = now.getHours();
-  const min = now.getMinutes();
-  const time = `${year}${month}${date}${hour}${min}`;
+  const time = `${getCurrentDate()}${getCurrentDateTime()}`;
   const directory = `screenShot/${method}/`;
-
   const path = `${directory}${time}.png`;
   console.log(path);
 
