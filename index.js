@@ -1,6 +1,6 @@
 const puppeteer = require("puppeteer");
 const { default: axios } = require("axios");
-
+const { SERVER_URL } = require("./config");
 const iframSelector = "#ifrm_movie_time_table";
 
 // let firstStarted = false;
@@ -15,7 +15,7 @@ const processing = {
 const interval = 20000;
 
 const crawler = async (cb) => {
-  const res = await axios.get("http://localhost:8080/crawl");
+  const res = await axios.get(SERVER_URL + "crawl");
   // movieData = res.data;
 
   // console.log(JSON.stringify(movieData));
@@ -164,7 +164,7 @@ async function getImaxMovie(page, date) {
   if (setMovieData.length === 0) return;
 
   try {
-    await axios.put("http://localhost:8080/crawl", {
+    await axios.put(SERVER_URL + "crawl", {
       date,
       movieData: setMovieData,
     });
@@ -175,7 +175,7 @@ async function getImaxMovie(page, date) {
   if (newItem.length !== 0) {
     for (let i = 0; i < newItem.length; i++) {
       const data = newItem[i];
-      const res = await axios.post("http://localhost:8080/notifications", data);
+      const res = await axios.post(SERVER_URL + "notifications", data);
       console.log(res.data);
     }
   }
