@@ -109,12 +109,10 @@ const getValues = async (processingIdList, page) => {
       const result = [];
       for (let a = 0; a < cinemaTypeList.children.length; a++) {
         const screenType = cinemaTypeList.children[a].textContent.toLowerCase();
-        console.log(screenType, "zz");
         if (screenType === "4dx" || screenType === "imax") {
           result.push(screenType);
         }
       }
-      console.log(result);
       return result;
     }, cinemaTypeList);
     postDataList.push({

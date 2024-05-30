@@ -15,6 +15,7 @@ let movieData = {};
 let data = {};
 
 const crawler = async (cb) => {
+  console.log(getCurrentDate(true), getCurrentDateTime(), "작업 시작");
   const res = await axios.get(SERVER_URL + "crawl");
   const browser = await puppeteer.launch({
     headless: false,
@@ -42,7 +43,6 @@ const crawler = async (cb) => {
 };
 
 async function oneMinCrawling(page) {
-  console.log("시작한닷");
   const now = Date.now();
   const dateString = getCurrentDate(true);
   const nowTime = getCurrentDateTime();
@@ -61,7 +61,6 @@ async function oneMinCrawling(page) {
       await puppeteerScreenShot("oneMinCrawling", page);
     }
   } finally {
-    // console.log(JSON.stringify(movieData));
     console.log(((now - Date.now()) * -1) / 1000, "초 걸림");
     postSheet(
       "5min",
@@ -78,14 +77,12 @@ async function getImaxMovie(page, date) {
   const showTimesSelector = "body > div > div.sect-showtimes > ul";
   const baseUrl =
     "http://www.cgv.co.kr/theaters/?areacode=01&theaterCode=0013&date=";
-  console.log(date, "시작");
   await page.goto(baseUrl + date, { timeout: 60000 });
   await page.waitForSelector(iframSelector);
   const iframeHandle = await page.$(iframSelector);
   const iframe = await iframeHandle.contentFrame();
 
   const ul = await iframe.$(showTimesSelector);
-  console.log(data);
   const [setMovieData, newItem] = await iframe.evaluate(
     (ul, movieData, date, allowCinemaTypes) => {
       // --- 필요한 함수 정의 ---
@@ -118,11 +115,9 @@ async function getImaxMovie(page, date) {
         const schedule = [];
 
         const hasCinemaTypes = getCurrentCinemaTypes(date, movieName);
-        console.log(hasCinemaTypes, "여기요@@@");
         for (let x = 1; x < li.children.length; x++) {
           const ele = li.children[x].children[0].children[0].children[1];
           const cinemaType = ele.innerText.replace(/\s/g, "").toLowerCase();
-          console.log(cinemaType, allowCinemaTypes);
           // return;
 
           if (!allowCinemaTypes.includes(cinemaType)) continue;
@@ -153,7 +148,6 @@ async function getImaxMovie(page, date) {
             hasCinemaTypes,
           });
         }
-        console.log("대체 어디야");
       }
       return [setMovieData, newItem];
     },
@@ -178,7 +172,6 @@ async function getImaxMovie(page, date) {
     for (let i = 0; i < newItem.length; i++) {
       const data = newItem[i];
       const res = await axios.post(SERVER_URL + "notifications", data);
-      console.log(res.data);
     }
   }
 
@@ -191,16 +184,13 @@ async function updateDateList(page) {
   try {
     const mainPage =
       "http://www.cgv.co.kr/theaters/?areacode=01&theaterCode=0013";
-    console.log("날짜 주기 업데이트");
     await page.goto(mainPage, { timeout: 60000 });
     await page.waitForSelector(iframSelector);
     const iframeHandle = await page.$(iframSelector);
     const iframe = await iframeHandle.contentFrame();
-    console.log("ㅋㅋ");
 
     const scheduleCalendar = await getScheduleList(iframe, page);
     //   movieData = {};
-    console.log(scheduleCalendar);
     scheduleCalendar.forEach((item) => {
       if (movieData[item] == null) movieData[item] = [];
     });
@@ -253,7 +243,6 @@ async function getScheduleList(iframe, page) {
       return scheduleCalendar;
     }, sliderElement);
     const result = dropPastDate(scheduleList);
-    console.log(result, "이것들이 리스트");
     return result;
   } catch (err) {
     console.log("[getScheduleList:Error]", err.message);
@@ -275,9 +264,6 @@ function sleep(milliseconds) {
 }
 
 async function reqNotification(date, cinemaType, schedule) {
-  console.log(`
-        새 오픈 : [${date}  / ${cinemaType}] 
-    `);
   const data = {
     date,
     cinemaType,
@@ -300,14 +286,12 @@ async function puppeteerScreenShot(method, page) {
   const time = `${getCurrentDate()}${getCurrentDateTime()}`;
   const directory = `screenShot/${method}/`;
   const path = `${directory}${time}.png`;
-  console.log(path);
 
   try {
     await page.screenshot({
       path: path,
       fullPage: true,
     });
-    console.log("스샷!");
   } catch (error) {
     console.error("스크린샷을 캡처하는 중에 오류가 발생했습니다:", error);
   } finally {
