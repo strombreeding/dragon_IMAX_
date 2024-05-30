@@ -23,6 +23,8 @@ const crawler = async (cb) => {
   //   const browser = await puppeteer.launch();
   const browser = await puppeteer.launch({
     headless: false,
+    executablePath: "/usr/bin/chromium-browser",
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
   const page = await browser.newPage();
