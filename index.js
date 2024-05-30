@@ -45,12 +45,7 @@ const crawler = async (cb) => {
   //   setInterval(async () => {
   //     await updateDateList(page);
   //   }, 24 * 60 * 60 * 1000);
-
   await oneMinCrawling(page);
-  setInterval(async () => {
-    await oneMinCrawling(page);
-    // console.log(getCurrentDateTime(), "\n", JSON.stringify(movieData));
-  }, interval);
 };
 
 async function oneMinCrawling(page) {
@@ -63,14 +58,17 @@ async function oneMinCrawling(page) {
       await sleep(150);
     }
   } catch (err) {
-    console.log("[Error]: ", err.message);
+    console.log("[oneMinCrawling:Error] ", err.message);
+    if (retryOption(err)) {
+      oneMinCrawling();
+    } else {
+      await puppeteerScreenShot("oneMinCrawling", page);
+    }
   } finally {
     // console.log(JSON.stringify(movieData));
     console.log(((now - Date.now()) * -1) / 1000, "초 걸림");
   }
 }
-
-async function pageSetting(page) {}
 
 async function getImaxMovie(page, date) {
   const showTimesSelector = "body > div > div.sect-showtimes > ul";
@@ -143,7 +141,6 @@ async function getImaxMovie(page, date) {
           });
           hasCinemaTypes.push(cinemaType);
           newItem.push({ date, cinemaType, schedule, movieName });
-          // throw new Error();
         }
         if (hasCinemaTypes.length !== 0) {
           setMovieData.push({
@@ -153,7 +150,6 @@ async function getImaxMovie(page, date) {
           });
         }
         console.log("대체 어디야");
-        // throw new Error();
       }
       return [setMovieData, newItem];
     },
@@ -188,62 +184,84 @@ crawler();
 
 //
 async function updateDateList(page) {
-  const mainPage =
-    "http://www.cgv.co.kr/theaters/?areacode=01&theaterCode=0013";
+  try {
+    const mainPage =
+      "http://www.cgv.co.kr/theaters/?areacode=01&theaterCode=0013";
+    console.log("날짜 주기 업데이트");
+    await page.goto(mainPage, { timeout: 60000 });
+    await page.waitForSelector(iframSelector);
+    const iframeHandle = await page.$(iframSelector);
+    const iframe = await iframeHandle.contentFrame();
+    console.log("ㅋㅋ");
 
-  // 페이지로 이동하고 로드될 때까지 대기
-  console.log("날짜 주기 업데이트");
-  await page.goto(mainPage, { timeout: 60000 });
-  await page.waitForSelector(iframSelector);
-  const iframeHandle = await page.$(iframSelector);
-  const iframe = await iframeHandle.contentFrame();
-  console.log("ㅋㅋ");
-  const scheduleCalendar = await getScheduleList(iframe);
+    const scheduleCalendar = await getScheduleList(iframe, page);
+    //   movieData = {};
+    console.log(scheduleCalendar);
+    scheduleCalendar.forEach((item) => {
+      if (movieData[item] == null) movieData[item] = [];
+    });
+    await sleep(1500);
+    // 페이지로 이동하고 로드될 때까지 대기
+  } catch (err) {
+    console.log("[updateDateList:Error]", err.message);
 
-  //   movieData = {};
-
-  scheduleCalendar.forEach((item) => {
-    if (movieData[item] == null) movieData[item] = [];
-  });
-
-  //   await sleep(1500);
+    if (retryOption(err)) {
+      updateDateList();
+    } else {
+      await puppeteerScreenShot("updateDateList", page);
+    }
+  }
 }
+
 // 현재 용산 CGV의 상영 스케쥴 날짜를 얻는 것
-async function getScheduleList(iframe) {
+async function getScheduleList(iframe, page) {
   const sliderElement = await iframe.$("#slider");
-  const scheduleList = await iframe.evaluate((element) => {
-    const scheduleCalendar = [];
-    const childNodes = element.children;
-    try {
-      for (let i = 0; i < childNodes.length; i++) {
-        const ele = childNodes[i];
-        if (ele.tagName.toLowerCase() === "div") {
-          // scheduleLength = scheduleLength + ele.children.length;
-          const lis = ele.children[0].children;
-          for (let a = 0; a < lis.length; a++) {
-            let nowYear = new Date().getFullYear();
-            const li = lis[a];
-            const tagA = li.children[0].children[0].children; // a 태그임 예를 클릭하면됨
-            let date = "";
-            for (let x = 0; x < tagA.length; x++) {
-              const a = tagA[x];
-              date = date + a.textContent;
+  console.log("어디야");
+
+  try {
+    const scheduleList = await iframe.evaluate((element) => {
+      const scheduleCalendar = [];
+      const childNodes = element.children;
+      try {
+        for (let i = 0; i < childNodes.length; i++) {
+          const ele = childNodes[i];
+          if (ele.tagName.toLowerCase() === "div") {
+            // scheduleLength = scheduleLength + ele.children.length;
+            const lis = ele.children[0].children;
+            for (let a = 0; a < lis.length; a++) {
+              let nowYear = new Date().getFullYear();
+              const li = lis[a];
+              const tagA = li.children[0].children[0].children; // a 태그임 예를 클릭하면됨
+              let date = "";
+              for (let x = 0; x < tagA.length; x++) {
+                const a = tagA[x];
+                date = date + a.textContent;
+              }
+              const regex = /\d/g;
+              const dateStr = date.match(regex).join("");
+              if (dateStr === "1231") nowYear++;
+              scheduleCalendar.push(nowYear.toString() + dateStr);
             }
-            const regex = /\d/g;
-            const dateStr = date.match(regex).join("");
-            if (dateStr === "1231") nowYear++;
-            scheduleCalendar.push(nowYear.toString() + dateStr);
           }
         }
+      } catch (err) {
+        console.log(err);
       }
-    } catch (err) {
-      console.log(err);
+      return scheduleCalendar;
+    }, sliderElement);
+    const result = dropPastDate(scheduleList);
+    console.log(result, "이것들이 리스트");
+    return result;
+  } catch (err) {
+    console.log("[getScheduleList:Error]", err.message);
+
+    if (retryOption(err)) {
+      await getScheduleList();
+    } else {
+      console.log("이거타는거 아냐 ?");
+      await puppeteerScreenShot("getScheduleList", page);
     }
-    return scheduleCalendar;
-  }, sliderElement);
-  const result = dropPastDate(scheduleList);
-  console.log(result, "이것들이 리스트");
-  return result;
+  }
 }
 
 // 현재 날짜 기준으로 지난 일수를 배열에서 제거후 반환
@@ -322,4 +340,43 @@ async function reqNotification(date, cinemaType, schedule) {
                 받아온 date로 검색한 후
                 해당 디바이스들한테 모두 노티피케이션 해주면 됨
           `);
+}
+
+function retryOption(err) {
+  let process = "";
+  if (err.message.includes("Waiting failed")) {
+    process++;
+  }
+  if (err.message.includes("ms exceeded")) {
+    process++;
+  }
+  console.log(process);
+  return process === 2 ? true : false;
+}
+
+const fs = require("fs");
+async function puppeteerScreenShot(method, page) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  const date = now.getDate();
+  const hour = now.getHours();
+  const min = now.getMinutes();
+  const time = `${year}${month}${date}${hour}${min}`;
+  const directory = `screenShot/${method}/`;
+
+  const path = `${directory}${time}.png`;
+  console.log(path);
+
+  try {
+    await page.screenshot({
+      path: path,
+      fullPage: true,
+    });
+    console.log("스샷!");
+  } catch (error) {
+    console.error("스크린샷을 캡처하는 중에 오류가 발생했습니다:", error);
+  } finally {
+    process.exit(); // 작업 완료 후 프로세스 종료
+  }
 }
