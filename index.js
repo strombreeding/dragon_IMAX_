@@ -9,6 +9,7 @@ const {
   getCurrentDateTime,
 } = require("./utils");
 const { postSheet } = require("./gcp");
+const { sendSlackBot } = require("./slack");
 // let firstStarted = false;
 let allowCinemaTypes = ["imax", "4dx"];
 let movieData = {};
@@ -58,6 +59,7 @@ async function oneMinCrawling(page) {
     if (retryOption(err)) {
       oneMinCrawling();
     } else {
+      sendSlackBot("[oneMinCrawling]:에러발생");
       await puppeteerScreenShot("oneMinCrawling", page);
     }
   } finally {
@@ -202,6 +204,7 @@ async function updateDateList(page) {
     if (retryOption(err)) {
       updateDateList();
     } else {
+      sendSlackBot("[updateDateList]:에러발생");
       await puppeteerScreenShot("updateDateList", page);
     }
   }
@@ -250,6 +253,7 @@ async function getScheduleList(iframe, page) {
     if (retryOption(err)) {
       await getScheduleList();
     } else {
+      sendSlackBot("[getScheduleList]:에러발생");
       await puppeteerScreenShot("getScheduleList", page);
     }
   }

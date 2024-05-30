@@ -3,6 +3,7 @@ const { default: axios } = require("axios");
 const { SERVER_URL } = require("./config");
 const { postSheet } = require("./gcp");
 const { getCurrentDate, getCurrentDateTime } = require("./utils");
+const { sendSlackBot } = require("./slack");
 // ---
 
 const imaxPage =
@@ -52,7 +53,11 @@ const movieCrawl = async () => {
     //데이터 DB로보내기
     await axios.put(SERVER_URL + "movies", postDataList);
     success = true;
+    throw new Error("zz");
+    return;
   } catch (err) {
+    console.log("힝구릉");
+    sendSlackBot("[movieCrawl]:에러발생");
   } finally {
     postSheet(
       "oneDay",
@@ -63,6 +68,9 @@ const movieCrawl = async () => {
       (((now - Date.now()) * -1) / 1000).toString() + "초"
     );
     browser.close();
+    setTimeout(() => {
+      process.exit();
+    }, 1000);
   }
 };
 
