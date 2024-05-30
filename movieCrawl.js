@@ -1,5 +1,6 @@
 const puppeteer = require("puppeteer");
 const { default: axios } = require("axios");
+const { SERVER_URL } = require("./config");
 
 const movieCrawl = async () => {
   const browser = await puppeteer.launch({
@@ -77,7 +78,7 @@ const movieCrawl = async () => {
   }
 
   //데이터 DB로보내기
-  await axios.put("http://localhost:8080/movies", postDataList);
+  await axios.put(SERVER_URL + "movies", postDataList);
   console.log(postDataList);
 
   await page.close();
