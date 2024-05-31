@@ -55,7 +55,6 @@ const movieCrawl = async () => {
     //데이터 DB로보내기
     await axios.put(SERVER_URL + "movies", postDataList);
     success = true;
-    throw new Error("zz");
     return;
   } catch (err) {
     console.log("힝구릉");
