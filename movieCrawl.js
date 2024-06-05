@@ -12,6 +12,8 @@ const forDXPage =
   "http://www.cgv.co.kr/theaters/special/defaultDetailNew.aspx?idx=2";
 const postSelector =
   "#contaniner > article.specialMovie_detail_wrap > div > div > div.swiper.specialMovie_detail_inner_list.noneSlider > div";
+const postSelectorSlider =
+  "#contaniner > article.specialMovie_detail_wrap > div > div > div.swiper.specialMovie_detail_inner_list.swiper-container-initialized.swiper-container-horizontal > div";
 const movieInfoPage = "http://www.cgv.co.kr/movies/detail-view/?midx=";
 const movieNameSelector =
   "#select_main > div.sect-base-movie > div.box-contents > div.title > strong";
@@ -25,7 +27,7 @@ const screenTypeSelector =
 const movieCrawl = async () => {
   const browser = await puppeteer.launch({
     headless: true,
-    executablePath: "/usr/bin/chromium-browser",
+    // executablePath: "/usr/bin/chromium-browser",
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
 
@@ -57,7 +59,7 @@ const movieCrawl = async () => {
     success = true;
     return;
   } catch (err) {
-    console.log("힝구릉");
+    console.log("힝구릉", err);
     sendSlackBot("[movieCrawl]:에러발생");
   } finally {
     postSheet(
@@ -76,24 +78,41 @@ const movieCrawl = async () => {
 };
 
 const getPostIdList = async (page, pageName, selector) => {
-  await page.goto(pageName, { timeout: 60000 });
-  await page.waitForSelector(selector);
-  const mainDiv = await page.$(selector);
-  const getMovieIdList = await page.evaluate((mainDiv) => {
-    const movieIdList = [];
-    const postList = mainDiv.children;
-    for (let i = 0; i < postList.length; i++) {
-      const post = postList[i].children[0];
+  let retry = false;
+  console.log("[getPostIdList processing]", retry, selector);
+  try {
+    await page.goto(pageName, { timeout: 10000 });
+    await page.waitForSelector(selector);
+    const mainDiv = await page.$(selector);
+    const getMovieIdList = await page.evaluate((mainDiv) => {
+      const movieIdList = [];
+      const postList = mainDiv.children;
+      for (let i = 0; i < postList.length; i++) {
+        const post = postList[i].children[0];
 
-      const urlString = post.href;
-      const url = new URL(urlString);
-      const midx = url.searchParams.get("midx");
-      if (movieIdList.includes(midx)) continue;
-      movieIdList.push(midx);
+        const urlString = post.href;
+        const url = new URL(urlString);
+        const midx = url.searchParams.get("midx");
+        if (movieIdList.includes(midx)) continue;
+        movieIdList.push(midx);
+      }
+      return movieIdList;
+    }, mainDiv);
+    return getMovieIdList;
+  } catch (err) {
+    console.log(err.message);
+    // 슬라이더가 있을 경우에 한번 더 실행해보고 에러
+    if (!retry && err.message.includes("Waiting failed:")) {
+      console.log("한번 더 실행해보기");
+      const cliderIdList = await getPostIdList(
+        page,
+        pageName,
+        postSelectorSlider
+      );
+      return cliderIdList;
     }
-    return movieIdList;
-  }, mainDiv);
-  return getMovieIdList;
+    throw new Error(err);
+  }
 };
 const getValues = async (processingIdList, page) => {
   const postDataList = [];
