@@ -18,6 +18,7 @@ let data = {};
 const crawler = async (cb) => {
   console.log(getCurrentDate(true), getCurrentDateTime(), "작업 시작");
   const res = await axios.get(SERVER_URL + "crawl");
+  movieData = res.data;
   const browser = await puppeteer.launch({
     headless: false,
     executablePath: "/usr/bin/chromium-browser",
@@ -89,11 +90,11 @@ async function getImaxMovie(page, date) {
     (ul, movieData, date, allowCinemaTypes) => {
       // --- 필요한 함수 정의 ---
 
-      function getMovieName(li) {
+      const getMovieName = (li) => {
         const movieName = li.children[0].children[1].children[0].textContent;
         return movieName.replace(/\s/g, "");
-      }
-      function getCurrentCinemaTypes(date, movieName) {
+      };
+      const getCurrentCinemaTypes = (date, movieName) => {
         // 한번도 안했던거면 처음 시작하는거니까 시네마타입배열은 []임
         if (movieData[date].length < 1) {
           return [];
@@ -101,31 +102,38 @@ async function getImaxMovie(page, date) {
         const key = movieData[date].filter(
           (obj) => obj.movieName === movieName
         );
+        if (key.length === 0) {
+          return [];
+        }
         return key[0]["hasCinemaTypes"];
-      }
+      };
 
       // --- 함수정의 끝 ---
 
       const setMovieData = [];
       const newItem = [];
       const searchList = ul.children;
-
       // 현재 상영중인 영화를 반복문
       for (let a = 0; a < searchList.length; a++) {
         const li = searchList[a].children[0];
         const movieName = getMovieName(li);
         const schedule = [];
-
         const hasCinemaTypes = getCurrentCinemaTypes(date, movieName);
+        const currentCinemaTypeLength = hasCinemaTypes.length;
+
         for (let x = 1; x < li.children.length; x++) {
           const ele = li.children[x].children[0].children[0].children[1];
           const cinemaType = ele.innerText.replace(/\s/g, "").toLowerCase();
           // return;
 
           if (!allowCinemaTypes.includes(cinemaType)) continue;
-          // 이 위에서 걸리므로 그냥 해도됨
+          //
           if (hasCinemaTypes.includes(cinemaType)) continue;
-
+          // throw new Error(
+          //   `${hasCinemaTypes.includes(
+          //     cinemaType
+          //   )}/${movieName}/${hasCinemaTypes}`
+          // );
           const showing = [];
 
           // 영화의 상영타입별로 스케쥴을 정리
@@ -143,12 +151,33 @@ async function getImaxMovie(page, date) {
           hasCinemaTypes.push(cinemaType);
           newItem.push({ date, cinemaType, schedule, movieName });
         }
-        if (hasCinemaTypes.length !== 0) {
-          setMovieData.push({
-            movieName,
-            schedule,
-            hasCinemaTypes,
+        if (hasCinemaTypes.length > currentCinemaTypeLength) {
+          // if (movieData[date].length === 0) {
+          //   movieData[date].push({
+          //     movieName,
+          //     schedule: [],
+          //     hasCinemaTypes,
+          //   });
+          // }
+          const exist = movieData[date].find(
+            (item) => item.movieName === movieName
+          );
+
+          const setData = movieData[date].map((item) => {
+            if (item.movieName === movieName) {
+              item.schedule = [...item.schedule, ...schedule];
+            }
+            return item;
           });
+
+          if (setData.length === 0 || !exist) {
+            setData.push({
+              movieName,
+              schedule,
+              hasCinemaTypes,
+            });
+          }
+          setMovieData.push(...setData);
         }
       }
       return [setMovieData, newItem];
@@ -158,9 +187,7 @@ async function getImaxMovie(page, date) {
     date,
     allowCinemaTypes
   );
-
   if (setMovieData.length === 0) return;
-
   try {
     await axios.put(SERVER_URL + "crawl", {
       date,
@@ -173,7 +200,11 @@ async function getImaxMovie(page, date) {
   if (newItem.length !== 0) {
     for (let i = 0; i < newItem.length; i++) {
       const data = newItem[i];
-      const res = await axios.post(SERVER_URL + "notifications", data);
+      try {
+        const res = await axios.post(SERVER_URL + "notifications", data);
+      } catch (err) {
+      } finally {
+      }
     }
   }
 

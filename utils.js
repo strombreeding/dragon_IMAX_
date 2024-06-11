@@ -25,7 +25,6 @@ const getCurrentDateTime = () => {
 // 현재 날짜 기준으로 지난 일수를 배열에서 제거후 반환
 const dropPastDate = (compareList) => {
   const currentDate = getCurrentDate();
-  console.log(currentDate);
   const filteredDates = compareList.filter(
     (date) => Number(date.slice(-4)) >= Number(currentDate)
   );
@@ -45,8 +44,10 @@ const retryOption = (err) => {
   if (err.message.includes("ms exceeded")) {
     process++;
   }
-  console.log(process);
-  return process === 2 ? true : false;
+  if (err.message.includes("Navigation timeout")) {
+    process++;
+  }
+  return process >= 2 ? true : false;
 };
 
 module.exports = {

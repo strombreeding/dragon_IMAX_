@@ -59,7 +59,7 @@ const movieCrawl = async () => {
     success = true;
     return;
   } catch (err) {
-    console.log("힝구릉", err);
+    console.log("Error", err);
     sendSlackBot("[movieCrawl]:에러발생");
   } finally {
     postSheet(
@@ -129,7 +129,9 @@ const getValues = async (processingIdList, page) => {
       return result;
     }, moviePostSelector);
     const movieName = await page.evaluate((movieNameSelector) => {
-      const result = document.querySelector(movieNameSelector).textContent;
+      const result = document
+        .querySelector(movieNameSelector)
+        .textContent.replace(/\s+/g, "");
       return result;
     }, movieNameSelector);
     const cinemaTypeList = await page.$(screenTypeSelector);

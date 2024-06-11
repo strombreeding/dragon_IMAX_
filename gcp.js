@@ -24,7 +24,6 @@ async function writeToSpreadsheet(auth, data, method) {
   const sheets = google.sheets({ version: "v4", auth });
   const position = method === "5min" ? "A4" : "G4";
   // 쓰고자 하는 데이터
-  console.log(data);
   const newData = [
     data,
     // 추가 데이터가 있다면 여기에 추가하세요.
